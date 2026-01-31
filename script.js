@@ -9,10 +9,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const timezoneList = document.getElementById('timezone-list');
 
     // State
-    // Default to local clock
-    let clocks = JSON.parse(localStorage.getItem('clocks')) || [
-        { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, isLocal: true }
-    ];
+    let clocks = JSON.parse(localStorage.getItem('clocks')) || [];
+
+    // TRANSFORM: Deduplicate Clocks immediately
+    // usage of Map to keep unique timezones, preserving order of first occurrence
+    const uniqueClocks = new Map();
+    clocks.forEach(clock => {
+        if (!uniqueClocks.has(clock.timezone)) {
+            uniqueClocks.set(clock.timezone, clock);
+        }
+    });
+    clocks = Array.from(uniqueClocks.values());
+
+    // Ensure Local Clock always exists
+    if (!clocks.some(c => c.isLocal)) {
+        clocks.unshift({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, isLocal: true });
+    }
+
+    // Ensure Salesforce Default exists if explicitly missing (e.g. from fresh start)
+    // But deduplication above handles the case where it existed multiple times.
+    // If it's missing entirely (user never had it or deleted it before I hid the button), duplicate logic shouldn't add it back unless we consider this a "reset".
+    // However, user said "display by default", so let's ensure it's there if the list implies a default state (e.g. only local clock).
+    // If user has many clocks, we assume they are customizing, so we don't force it.
+    // But given the "I see two" issue, the main fix is the deduplication above.
+
+    // Fallback: If localStorage was empty, `clocks` is [], then we add defaults.
+    if (localStorage.getItem('clocks') === null || clocks.length === 0) {
+        clocks = [
+            { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, isLocal: true },
+            { timezone: 'Etc/GMT+6', isLocal: false }
+        ];
+    } else {
+        // If we have data, we just save the deduplicated version back to ensure it persists clean
+        localStorage.setItem('clocks', JSON.stringify(clocks));
+    }
 
     // Theme Logic
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -27,25 +57,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Major Timezones (Curated List)
     const majorTimezones = [
+        'UTC', // Added UTC
         'Pacific/Midway', 'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles',
         'America/Denver', 'America/Chicago', 'America/New_York', 'America/Sao_Paulo',
         'Atlantic/Azores', 'Europe/London', 'Europe/Paris', 'Europe/Berlin',
         'Europe/Moscow', 'Africa/Cairo', 'Africa/Johannesburg', 'Asia/Dubai',
         'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Bangkok',
-        'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Sydney', 'Pacific/Auckland'
+        'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Sydney', 'Pacific/Auckland',
+        'Etc/GMT+6' // For Salesforce / Marketing Cloud (Fixed -06:00)
     ];
+
+    // Custom Display Names
+    const customLabels = {
+        'UTC': 'UTC',
+        'Etc/GMT+6': 'Salesforce / MCE'
+    };
 
     // Helper to get offset in minutes
     function getOffsetMinutes(timeZone) {
-        const now = new Date();
-        const str = now.toLocaleString('en-US', { timeZone, timeZoneName: 'longOffset' });
-        // str format like "1/31/2026, 10:00:00 AM GMT-05:00" or "... GMT+05:30"
-        const match = str.match(/GMT([+-])(\d{2}):(\d{2})/);
-        if (!match) return 0; // UTC or error
-        const sign = match[1] === '+' ? 1 : -1;
-        const hours = parseInt(match[2], 10);
-        const mins = parseInt(match[3], 10);
-        return sign * (hours * 60 + mins);
+        try {
+            const now = new Date();
+            const str = now.toLocaleString('en-US', { timeZone, timeZoneName: 'longOffset' });
+            // str format like "1/31/2026, 10:00:00 AM GMT-05:00" or "... GMT+05:30"
+            const match = str.match(/GMT([+-])(\d{2}):(\d{2})/);
+            if (!match) return 0; // UTC or error
+            const sign = match[1] === '+' ? 1 : -1;
+            const hours = parseInt(match[2], 10);
+            const mins = parseInt(match[3], 10);
+            return sign * (hours * 60 + mins);
+        } catch (e) {
+            console.error("Error getting offset for", timeZone, e);
+            return 0;
+        }
     }
 
     // Prepare Sorted List
@@ -67,16 +110,20 @@ document.addEventListener('DOMContentLoaded', () => {
             city: city,
             offsetMins: offsetMins,
             offsetLabel: offsetLabel,
-            searchStr: (city + " " + tz).toLowerCase()
+            searchStr: (city + " " + tz + (customLabels[tz] || "")).toLowerCase()
         };
     }).sort((a, b) => a.offsetMins - b.offsetMins);
 
-    // Helper to get offset (moved up to be accessible or duplicated if scope issue, but it's in same scope)
+    // Helper to get offset string
     function getOffsetString(timeZone) {
-        const now = new Date();
-        const str = now.toLocaleString('en-US', { timeZone, timeZoneName: 'longOffset' });
-        const match = str.match(/GMT([+-]\d{2}:\d{2})/);
-        return match ? `GMT${match[1]}` : 'GMT+00:00';
+        try {
+            const now = new Date();
+            const str = now.toLocaleString('en-US', { timeZone, timeZoneName: 'longOffset' });
+            const match = str.match(/GMT([+-]\d{2}:\d{2})/);
+            return match ? `GMT${match[1]}` : 'GMT+00:00';
+        } catch (e) {
+            return 'GMT+00:00';
+        }
     }
 
     function renderTimezoneList(filter = "") {
@@ -88,11 +135,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 li.className = 'timezone-option';
 
-                // Display: "Asia / Kolkata (GMT+05:30)"
-                // Matching the format under the clock: Region / City
-                const regionCity = data.id.replace(/_/g, ' ').split('/').join(' / ');
+                // Display Logic
+                let label = customLabels[data.id];
+                if (!label) {
+                    label = data.id.replace(/_/g, ' ').split('/').join(' / ');
+                }
 
-                li.textContent = `${regionCity} (${data.offsetLabel})`;
+                li.textContent = `${label} (${data.offsetLabel})`;
                 li.dataset.timezone = data.id;
                 li.addEventListener('click', () => {
                     addClock(data.id);
@@ -104,8 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Enhanced Search Aliases
-    // We append these to searchStr above implicitly if we want,
-    // or we can manually Map aliases to our curated list.
     const extraAliases = {
         'Asia/Kolkata': 'Delhi New Delhi Mumbai India',
         'America/Los_Angeles': 'San Francisco Seattle California',
@@ -144,8 +191,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     addClockBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (clocks.length >= 6) {
-            alert('Max 6 clocks allowed.');
+        if (clocks.length >= 8) {
+            alert('Max 8 clocks allowed.');
             return;
         }
         togglePicker();
@@ -169,6 +216,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderClocks() {
         clockGrid.innerHTML = '';
 
+        // Auto-sort by offset
+        clocks.sort((a, b) => getOffsetMinutes(a.timezone) - getOffsetMinutes(b.timezone));
+        // Save the sorted order so it persists correctly
+        saveClocks();
+
         // Granular Spacing Support via Data Attribute
         clockGrid.setAttribute('data-clock-count', clocks.length);
 
@@ -184,6 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const timezoneDisplay = clone.querySelector('.timezone-display');
             const removeBtn = clone.querySelector('.remove-btn');
             const homeIcon = clone.querySelector('.home-icon');
+            const salesforceIcon = clone.querySelector('.salesforce-icon');
 
             // Metadata linkage
             card.dataset.timezone = clockData.timezone;
@@ -191,13 +244,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Setup controls
             if (clockData.isLocal) {
-                homeIcon.style.display = 'block'; // SVG displayed as block/inline-block
-                removeBtn.style.display = 'none'; // Cannot remove local
+                homeIcon.style.display = 'block';
+                salesforceIcon.style.display = 'none';
+                removeBtn.style.display = 'none';
+            } else if (clockData.timezone === 'Etc/GMT+6') {
+                homeIcon.style.display = 'none';
+                salesforceIcon.style.display = 'block';
+                // User requirement: "MCE clock shouldn't show the delete icon"
+                removeBtn.style.display = 'none';
             } else {
+                homeIcon.style.display = 'none';
+                salesforceIcon.style.display = 'none';
+                removeBtn.style.display = 'flex';
+
+                // Add event listener ONLY for removable clocks
                 removeBtn.addEventListener('click', () => removeClock(index));
             }
 
-            // Initial Update (async to not block render, but fast enough)
+            // Initial Update
             updateSingleClock(clockData.timezone, hourHand, minuteHand, secondHand, dateDisplay, timezoneDisplay);
 
             clockGrid.appendChild(clone);
@@ -213,8 +277,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addClock(timezone) {
-        if (clocks.length >= 6) {
-            alert('Max 6 clocks allowed.');
+        if (clocks.length >= 8) {
+            alert('Max 8 clocks allowed.');
             return;
         }
         clocks.push({ timezone, isLocal: false });
@@ -228,56 +292,73 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Clock Loop
     function updateSingleClock(timezone, hourHand, minuteHand, secondHand, dateDisplay, timezoneDisplay) {
-        const now = new Date();
-        const timeInTz = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+        try {
+            const now = new Date();
+            const timeInTz = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
 
-        const seconds = timeInTz.getSeconds();
-        const milliseconds = now.getMilliseconds();
-        const minutes = timeInTz.getMinutes();
-        const hours = timeInTz.getHours();
+            const seconds = timeInTz.getSeconds();
+            const milliseconds = now.getMilliseconds();
+            const minutes = timeInTz.getMinutes();
+            const hours = timeInTz.getHours();
 
-        // Day/Night Logic (Simple 6am-6pm)
-        const isDay = hours >= 6 && hours < 18;
+            // Day/Night Logic (Simple 6am-6pm)
+            const isDay = hours >= 6 && hours < 18;
 
-        const card = dateDisplay.closest('.clock-card');
-        if (card) {
-            if (isDay) {
-                card.classList.add('day');
-                card.classList.remove('night');
-            } else {
-                card.classList.add('night');
-                card.classList.remove('day');
+            const card = dateDisplay.closest('.clock-card');
+            if (card) {
+                if (isDay) {
+                    card.classList.add('day');
+                    card.classList.remove('night');
+                } else {
+                    card.classList.add('night');
+                    card.classList.remove('day');
+                }
             }
+
+            const secondsDegrees = ((seconds + milliseconds/1000) / 60) * 360;
+            const minutesDegrees = ((minutes / 60) * 360) + ((seconds/60)*6);
+            const hoursDegrees = ((hours / 12) * 360) + ((minutes/60)*30);
+
+            secondHand.style.transform = `translateX(-50%) rotate(${secondsDegrees}deg)`;
+            minuteHand.style.transform = `translateX(-50%) rotate(${minutesDegrees}deg)`;
+            hourHand.style.transform = `translateX(-50%) rotate(${hoursDegrees}deg)`;
+
+            // Date text
+            const options = { month: 'short', day: 'numeric', timeZone: timezone };
+            dateDisplay.textContent = now.toLocaleDateString('en-US', options).toUpperCase();
+
+            // Timezone Text Logic
+            let displayName = customLabels[timezone];
+            if (!displayName) {
+                displayName = timezone.replace(/_/g, ' ').split('/').join(' / ').toUpperCase();
+            }
+
+            // GMT Offset
+            const offsetLabel = getOffsetString(timezone);
+
+            // Season Logic
+            let season = 'WINTER';
+
+            // Static Timezones override
+            if (timezone === 'UTC' || timezone === 'Etc/GMT+6') {
+                season = 'No DST';
+            } else {
+                try {
+                    const longName = now.toLocaleDateString('en-US', { timeZone: timezone, timeZoneName: 'long' });
+                    const isSummer = longName.toLowerCase().includes('daylight') || longName.toLowerCase().includes('summer');
+                    season = isSummer ? 'SUMMER' : 'WINTER';
+                } catch (e) {
+                    // fallback if long name lookup fails
+                }
+            }
+
+            timezoneDisplay.innerHTML = `
+                <div>${displayName}</div>
+                <div class="timezone-details">${offsetLabel} • ${season}</div>
+            `;
+        } catch (e) {
+            console.error("Error updating clock for", timezone, e);
         }
-
-        const secondsDegrees = ((seconds + milliseconds/1000) / 60) * 360;
-        const minutesDegrees = ((minutes / 60) * 360) + ((seconds/60)*6);
-        const hoursDegrees = ((hours / 12) * 360) + ((minutes/60)*30);
-
-        secondHand.style.transform = `translateX(-50%) rotate(${secondsDegrees}deg)`;
-        minuteHand.style.transform = `translateX(-50%) rotate(${minutesDegrees}deg)`;
-        hourHand.style.transform = `translateX(-50%) rotate(${hoursDegrees}deg)`;
-
-        // Date text
-        const options = { month: 'short', day: 'numeric', timeZone: timezone };
-        dateDisplay.textContent = now.toLocaleDateString('en-US', options).toUpperCase();
-
-        // Timezone Text Logic
-        const displayName = timezone.replace(/_/g, ' ').split('/').join(' / ').toUpperCase();
-
-        // GMT Offset: Consistent Calculation
-        // Use the same logic as the picker: extract from longOffset
-        const offsetLabel = getOffsetString(timezone);
-
-        // Season Logic: Check if "Daylight" or "Summer" is in the long name
-        const longName = now.toLocaleDateString('en-US', { timeZone: timezone, timeZoneName: 'long' });
-        const isSummer = longName.toLowerCase().includes('daylight') || longName.toLowerCase().includes('summer');
-        const season = isSummer ? 'SUMMER' : 'WINTER';
-
-        timezoneDisplay.innerHTML = `
-            <div>${displayName}</div>
-            <div class="timezone-details">${offsetLabel} • ${season}</div>
-        `;
     }
 
     function tick() {
@@ -290,7 +371,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const dateDisplay = card.querySelector('.date-display');
             const timezoneDisplay = card.querySelector('.timezone-display');
 
-            updateSingleClock(tz, hourHand, minuteHand, secondHand, dateDisplay, timezoneDisplay);
+            if (tz && hourHand) {
+                 updateSingleClock(tz, hourHand, minuteHand, secondHand, dateDisplay, timezoneDisplay);
+            }
         });
         requestAnimationFrame(tick);
     }

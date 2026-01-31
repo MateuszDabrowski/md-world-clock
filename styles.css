@@ -131,10 +131,10 @@ body {
     /* Enable container queries for layout spacing */
 }
 
-.home-icon {
+.home-icon,
+.salesforce-icon {
     display: none;
     width: 32px;
-    /* Fixed 32px */
     height: 32px;
     color: var(--text-color);
 }
