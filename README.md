@@ -1,4 +1,4 @@
-# MD World Clock for MCE
+# MCE World Clock
 
 World Clock that helps you with Salesforce Marketing Cloud Engagement (MCE) system dates. Let the dashboard handle the timezone math so you can focus on building your automations.
 
