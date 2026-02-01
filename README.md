@@ -2,6 +2,10 @@
 
 World Clock that helps you with Salesforce Marketing Cloud Engagement (MCE) system dates. Let the dashboard handle the timezone math so you can focus on building your automations.
 
+> You Should Know
+>
+> The app code is 100% AI generated as a part of my agentic coding learning journey.
+
 ## The UTC-6 Challenge
 
 The most straightforward way to work with dates in MCE is to understand the server time.
