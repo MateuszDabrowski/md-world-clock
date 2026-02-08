@@ -118,22 +118,38 @@ document.addEventListener('DOMContentLoaded', () => {
             mceOptionsList.classList.toggle('hidden');
             // Close other pickers if open
             pickerContainer.classList.add('hidden');
+
+            // Focus logic
+            if (!mceOptionsList.classList.contains('hidden')) {
+                const firstOpt = mceOptionsList.querySelector('.mce-opt');
+                if (firstOpt) firstOpt.focus();
+            }
         });
     }
 
     // Handle MCE Menu Actions
     mceOpts.forEach(opt => {
-        opt.addEventListener('click', () => {
-            const action = opt.dataset.action;
+        opt.tabIndex = 0; // Make focusable
+
+        const action = () => {
+             const actionType = opt.dataset.action;
             mceOptionsList.classList.add('hidden');
 
-            if (action === 'convert') {
+            if (actionType === 'convert') {
                 mceInlineControls.classList.remove('hidden');
                 clockGrid.classList.add('mce-active'); // Add extra padding for scrolling
                 datetimeInput.focus();
                 if (mceResetBtn) mceResetBtn.classList.remove('hidden');
-            } else if (action === 'reset') {
+            } else if (actionType === 'reset') {
                 resetToLive();
+            }
+        };
+
+        opt.addEventListener('click', action);
+        opt.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                action();
             }
         });
     });
@@ -332,9 +348,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.textContent = `${data.city} (${data.offsetLabel})`; // city is now the full label e.g. "Poland / Warsaw"
                 li.title = data.windows; // Tooltip with Windows Timezone Name
                 li.dataset.timezone = data.id;
-                li.addEventListener('click', () => {
+                li.tabIndex = 0; // Make focusable
+
+                const selectAction = () => {
                     addClock(data.id);
                     closePicker();
+                    addClockBtn.focus(); // Return focus
+                };
+
+                li.addEventListener('click', selectAction);
+                li.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        selectAction();
+                    }
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        const next = li.nextElementSibling;
+                        if (next) next.focus();
+                    }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        const prev = li.previousElementSibling;
+                        if (prev) prev.focus();
+                        else timezoneSearch.focus();
+                    }
                 });
                 timezoneList.appendChild(li);
             }
@@ -348,7 +386,9 @@ document.addEventListener('DOMContentLoaded', () => {
         timezoneSearch.focus();
     }
 
-    function closePicker() { pickerContainer.classList.add('hidden'); }
+    function closePicker() {
+        pickerContainer.classList.add('hidden');
+    }
 
     addClockBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -361,6 +401,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     timezoneSearch.addEventListener('input', (e) => renderTimezoneList(e.target.value));
+
+    // Search Box Keyboard Nav
+    timezoneSearch.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const firstItem = timezoneList.firstElementChild;
+            if (firstItem) firstItem.focus();
+        }
+    });
 
     document.addEventListener('click', (e) => {
         if (!pickerContainer.classList.contains('hidden') &&

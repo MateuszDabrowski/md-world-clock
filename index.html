@@ -30,18 +30,19 @@
 
     <div id="controls-container">
         <div id="timezone-picker" class="hidden">
-            <input type="text" id="timezone-search" placeholder="Search timezone..." autofocus>
-            <ul id="timezone-list"></ul>
+            <input type="text" id="timezone-search" placeholder="Search timezone..." aria-label="Search timezone"
+                autofocus>
+            <ul id="timezone-list" role="listbox"></ul>
         </div>
         <button id="add-clock-btn" aria-label="Add Clock" class="fab">
             <span class="plus-icon">+</span>
         </button>
     </div>
     <div id="mce-container">
-        <ul id="mce-options-list" class="hidden">
-            <li id="mce-opt-convert" class="mce-opt" data-action="convert">Convert MCE System Dates</li>
+        <ul id="mce-options-list" class="hidden" role="menu">
+            <li id="mce-opt-convert" class="mce-opt" data-action="convert" role="menuitem">Convert MCE System Dates</li>
         </ul>
-        <button id="mce-btn" aria-label="MCE Functions">
+        <button id="mce-btn" aria-label="MCE Functions" aria-haspopup="true" aria-expanded="false">
             <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
                 <path
                     d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
@@ -58,10 +59,10 @@
     </main>
 
     <!-- Inline Script Output Panel -->
-    <div id="script-output" class="hidden">
+    <div id="script-output" class="hidden" role="region" aria-label="Script Output">
         <div class="script-output-header">
             <span>MCE CONVERSION SNIPPETS</span>
-            <button id="close-script-panel" aria-label="Close">✕</button>
+            <button id="close-script-panel" aria-label="Close Script Panel">✕</button>
         </div>
 
         <div class="script-grid">
@@ -70,7 +71,7 @@
                 <div class="section-label">SFMC SQL</div>
                 <div class="script-content">
                     <code id="sql-text"></code>
-                    <button class="copy-btn" data-target="sql-text">COPY</button>
+                    <button class="copy-btn" data-target="sql-text" aria-label="Copy SQL">COPY</button>
                 </div>
             </div>
 
@@ -79,7 +80,7 @@
                 <div class="section-label">AMPSCRIPT</div>
                 <div class="script-content">
                     <code id="ampscript-text"></code>
-                    <button class="copy-btn" data-target="ampscript-text">COPY</button>
+                    <button class="copy-btn" data-target="ampscript-text" aria-label="Copy AMPScript">COPY</button>
                 </div>
             </div>
 
@@ -88,37 +89,39 @@
                 <div class="section-label">SSJS</div>
                 <div class="script-content">
                     <code id="ssjs-text"></code>
-                    <button class="copy-btn" data-target="ssjs-text">COPY</button>
+                    <button class="copy-btn" data-target="ssjs-text" aria-label="Copy SSJS">COPY</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- MCE Inline Controls -->
-    <div id="mce-inline-controls" class="hidden">
+    <div id="mce-inline-controls" class="hidden" role="dialog" aria-label="MCE Date Converter">
         <p class="mce-instruction">Insert Salesforce Marketing Cloud Engagement system date</p>
         <div class="mce-input-group">
-            <input type="text" id="datetime-input" placeholder="e.g. Dec 23 2020 2:31PM">
+            <input type="text" id="datetime-input" placeholder="e.g. Dec 23 2020 2:31PM" aria-label="System Date Input">
             <button id="apply-time-btn">APPLY</button>
         </div>
-        <span id="mce-feedback"></span>
+        <span id="mce-feedback" aria-live="polite"></span>
     </div>
 
     <template id="clock-template">
         <div class="clock-card">
             <div class="clock-controls">
                 <!-- Home Icon -->
-                <svg class="home-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="home-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true">
                     <path d="M12 3L2 12H5V20H19V12H22L12 3Z" fill="currentColor" />
                 </svg>
                 <!-- Salesforce Cloud Icon -->
-                <svg class="salesforce-icon" viewBox="0 0 24 24" fill="currentColor">
+                <svg class="salesforce-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                     <path
                         d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
                 </svg>
                 <!-- Remove Icon: Bauhaus Cross (Geometric) -->
-                <button class="remove-btn" title="Remove Clock">
-                    <svg class="remove-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <button class="remove-btn" title="Remove Clock" aria-label="Remove Clock">
+                    <svg class="remove-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+                        aria-hidden="true">
                         <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" />
                         <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" />
                     </svg>
