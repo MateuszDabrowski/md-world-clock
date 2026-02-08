@@ -69,6 +69,11 @@
             <span>MCE CONVERSION SNIPPETS</span>
             <button id="close-script-panel" aria-label="Close Script Panel">✕</button>
         </div>
+        <div id="local-tz-notice" class="hidden">
+            <p>⚠️ <strong>SystemDateToLocalDate</strong> only works if this timezone is set as the local time for the
+                current MCE user.</p>
+            <button id="generate-dynamic-script">Generate Dynamic Script Instead</button>
+        </div>
 
         <div class="script-grid">
             <!-- SQL Section -->
@@ -185,7 +190,7 @@
 
     <!-- Dialog removed, replaced by custom picker in controls-container -->
 
-    <script src="script.js?v=62"></script>
+    <script src="script.js?v=63"></script>
 </body>
 
 </html>
