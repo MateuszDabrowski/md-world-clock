@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeScriptBtn = document.getElementById('close-script-panel');
     const copyBtns = document.querySelectorAll('.copy-btn');
 
+
     if (closeScriptBtn) {
         closeScriptBtn.addEventListener('click', () => {
             scriptOutput.classList.add('hidden');
@@ -135,10 +136,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (mceBtn) {
         mceBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            mceOptionsList.classList.toggle('hidden');
-            // Close other pickers if open
+
+            // Close other pickers/overlays if open
             pickerContainer.classList.add('hidden');
             scriptTimezonePicker.classList.add('hidden');
+            if (mceInlineControls) {
+                mceInlineControls.classList.add('hidden');
+                clockGrid.classList.remove('mce-active');
+            }
+
+            mceOptionsList.classList.toggle('hidden');
 
             // Focus and reset search
             if (!mceOptionsList.classList.contains('hidden')) {
@@ -256,6 +263,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- SCRIPT TIMEZONE PICKER ---
     function openScriptTimezonePicker() {
         if (!scriptTimezonePicker || !scriptTimezoneList) return;
+
+        // Close other menus
+        pickerContainer.classList.add('hidden');
+        if (mceOptionsList) mceOptionsList.classList.add('hidden');
+        if (mceInlineControls) {
+            mceInlineControls.classList.add('hidden');
+            clockGrid.classList.remove('mce-active');
+        }
 
         // Populate with currently displayed clocks (excluding Salesforce/MCE clock)
         scriptTimezoneList.innerHTML = '';
@@ -620,6 +635,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function openPicker() {
         pickerContainer.classList.remove('hidden');
+        // Close other menus
+        if (mceOptionsList) mceOptionsList.classList.add('hidden');
+        if (scriptTimezonePicker) scriptTimezonePicker.classList.add('hidden');
+        if (mceInlineControls) {
+            mceInlineControls.classList.add('hidden');
+            clockGrid.classList.remove('mce-active');
+        }
+
         timezoneSearch.value = "";
         renderTimezoneList();
         timezoneSearch.focus();
