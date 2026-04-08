@@ -54,10 +54,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // --- CONSTANTS ---
+    const MAX_CLOCKS = 8;
+
     // --- STATE & INITIALIZATION ---
     let clocks = JSON.parse(localStorage.getItem('clocks')) || [];
     let displayMode = localStorage.getItem('displayMode') || 'analog';
     let overrideTime = null; // Stays null for live time
+    let probeSource = null; // { timezone, hour } when time probe is active
 
     // Deduplicate Clocks immediately
     const uniqueClocks = new Map();
@@ -251,9 +255,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function resetToLive() {
         overrideTime = null;
+        probeSource = null;
         datetimeInput.value = "";
         mceInlineControls.classList.add('hidden');
-        clockGrid.classList.remove('mce-active'); // Remove extra padding
+        clockGrid.classList.remove('mce-active');
         mceFeedback.textContent = "";
         if (mceResetBtn) mceResetBtn.classList.add('hidden');
         renderClocks();
@@ -273,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Populate with currently displayed clocks (excluding Salesforce/MCE clock)
-        scriptTimezoneList.innerHTML = '';
+        scriptTimezoneList.replaceChildren();
 
         clocks.forEach(clockData => {
             if (clockData.timezone === 'Etc/GMT+6') return; // Skip Salesforce clock
@@ -484,7 +489,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- TIMEZONE DATA ---
-    // --- TIMEZONE DATA ---
     const timezoneDatabase = [
         { iana: 'Etc/GMT+12', windows: 'Dateline Standard Time', label: 'International Date Line West' },
         { iana: 'Etc/GMT+11', windows: 'UTC-11', label: 'Coordinated Universal Time-11' },
@@ -587,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- PICKER LOGIC ---
     function renderTimezoneList(filter = "") {
-        timezoneList.innerHTML = '';
+        timezoneList.replaceChildren();
         const lowerFilter = filter.toLowerCase();
         // Get currently used timezones to filter them out
         const usedTimezones = clocks.map(c => c.timezone);
@@ -654,8 +658,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     addClockBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (clocks.length >= 8) {
-            showNotification('MAX 8 CLOCKS ALLOWED');
+        if (clocks.length >= MAX_CLOCKS) {
+            showNotification(`MAX ${MAX_CLOCKS} CLOCKS ALLOWED`);
             return;
         }
         if (pickerContainer.classList.contains('hidden')) openPicker();
@@ -680,11 +684,15 @@ document.addEventListener('DOMContentLoaded', () => {
             !addClockBtn.contains(e.target)) {
             closePicker();
         }
+        // Close probe pickers when clicking outside
+        if (!e.target.closest('.probe-picker') && !e.target.closest('.probe-btn')) {
+            document.querySelectorAll('.probe-picker').forEach(p => p.classList.add('hidden'));
+        }
     });
 
     // --- CLOCK RENDERING ---
     function renderClocks() {
-        clockGrid.innerHTML = '';
+        clockGrid.replaceChildren();
         const ref = overrideTime || new Date();
         clocks.sort((a, b) => getOffsetMinutes(a.timezone, ref) - getOffsetMinutes(b.timezone, ref));
         saveClocks();
@@ -749,6 +757,58 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
+            // --- TIME PROBE ---
+            const probeBtn = clone.querySelector('.probe-btn');
+            const probePicker = clone.querySelector('.probe-picker');
+            const probeTimeInput = clone.querySelector('.probe-time-input');
+            const probeApplyBtn = clone.querySelector('.probe-apply-btn');
+            const probeCloseBtn = clone.querySelector('.probe-close');
+
+            // Pre-fill with current time in this timezone
+            if (probeSource && probeSource.timezone === clockData.timezone) {
+                const hh = probeSource.hour.toString().padStart(2, '0');
+                const mm = probeSource.minute.toString().padStart(2, '0');
+                probeTimeInput.value = `${hh}:${mm}`;
+            } else {
+                const nowParts = new Intl.DateTimeFormat('en-US', {
+                    timeZone: clockData.timezone, hour: 'numeric', minute: 'numeric', hour12: false
+                }).formatToParts(ref);
+                const curH = (nowParts.find(p => p.type === 'hour')?.value || '12').padStart(2, '0');
+                const curM = (nowParts.find(p => p.type === 'minute')?.value || '00').padStart(2, '0');
+                probeTimeInput.value = `${curH}:${curM}`;
+            }
+
+            const applyProbe = () => {
+                const [h, m] = probeTimeInput.value.split(':').map(Number);
+                if (!isNaN(h) && !isNaN(m)) {
+                    activateProbe(clockData.timezone, h, m);
+                    probePicker.classList.add('hidden');
+                }
+            };
+
+            probeApplyBtn.addEventListener('click', applyProbe);
+            probeTimeInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') applyProbe();
+            });
+
+            probeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.querySelectorAll('.probe-picker').forEach(p => p.classList.add('hidden'));
+                probePicker.classList.toggle('hidden');
+                if (!probePicker.classList.contains('hidden')) {
+                    probeTimeInput.focus();
+                }
+            });
+
+            probeCloseBtn.addEventListener('click', () => {
+                probePicker.classList.add('hidden');
+            });
+
+            // Highlight the probe source clock
+            if (probeSource && clockData.timezone === probeSource.timezone) {
+                card.classList.add('probe-active');
+            }
+
             updateSingleClock(
                 clockData.timezone,
                 hourHand, minuteHand, secondHand,
@@ -761,12 +821,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function addClock(timezone) {
-        if (clocks.length >= 8) {
-            showNotification('MAX 8 CLOCKS ALLOWED');
+        if (clocks.length >= MAX_CLOCKS) {
+            showNotification(`MAX ${MAX_CLOCKS} CLOCKS ALLOWED`);
             return;
         }
         clocks.push({ timezone, isLocal: false });
         saveClocks();
+        renderClocks();
+    }
+
+    function activateProbe(timezone, hour, minute) {
+        const now = new Date();
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            year: 'numeric', month: 'numeric', day: 'numeric'
+        }).formatToParts(now);
+        const getPart = (type) => parseInt(parts.find(p => p.type === type).value, 10);
+        const y = getPart('year');
+        const mo = getPart('month') - 1;
+        const d = getPart('day');
+
+        const tentative = new Date(Date.UTC(y, mo, d, hour, minute, 0));
+        const offsetMs = getOffsetMinutes(timezone, tentative) * 60000;
+        overrideTime = new Date(tentative.getTime() - offsetMs);
+
+        probeSource = { timezone, hour, minute };
+        if (mceResetBtn) mceResetBtn.classList.remove('hidden');
         renderClocks();
     }
 
@@ -844,7 +924,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (e) {}
             }
             if (timezoneDisplay) {
-                timezoneDisplay.innerHTML = `<div>${displayName}</div><div class="timezone-details">${offset} • ${season}</div>`;
+                const nameDiv = document.createElement('div');
+                nameDiv.textContent = displayName;
+                const detailsDiv = document.createElement('div');
+                detailsDiv.className = 'timezone-details';
+                detailsDiv.textContent = `${offset} \u2022 ${season}`;
+                timezoneDisplay.replaceChildren(nameDiv, detailsDiv);
             }
         } catch (e) {
             console.error("Error updating clock:", e);
